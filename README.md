@@ -6,3 +6,4 @@
 
 # Package vault-k8s
 
+Replaces: github.com/postfinance/vault/k8s
