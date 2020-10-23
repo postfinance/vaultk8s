@@ -4,7 +4,7 @@
 //
 // See also ``Kubernetes Auth Method`` from the Vault documentation
 // https://www.vaultproject.io/docs/auth/kubernetes.html
-package k8s
+package vaultk8s
 
 import (
 	"bytes"
@@ -210,7 +210,7 @@ func (v *Vault) NewRenewer(token string) (*api.Renewer, error) {
 		return nil, errors.Wrap(err, "failed to renew-self token")
 	}
 
-	renewer, err := v.client.NewLifetimeWatcher(&api.RenewerInput{Secret: secret})
+	renewer, err := v.client.NewRenewer(&api.RenewerInput{Secret: secret})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get token renewer")
 	}

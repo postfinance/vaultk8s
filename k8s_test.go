@@ -1,4 +1,4 @@
-package k8s
+package vaultk8s
 
 import (
 	"flag"
