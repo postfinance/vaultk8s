@@ -6,4 +6,6 @@
 
 # Package vaultk8s
 
-Replaces: github.com/postfinance/vault/k8s
+Package vaultk8s provides authentication with Vault on Kubernetes
+
+Replaces: `github.com/postfinance/vault/k8s`

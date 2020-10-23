@@ -1,4 +1,4 @@
-// Package k8s provides authentication with Vault on Kubernetes
+// Package vaultk8s provides authentication with Vault on Kubernetes
 //
 // Authentication is done with the Kubernetes Auth Method by Vault.
 //
