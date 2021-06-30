@@ -137,6 +137,10 @@ func (v *Vault) Authenticate() (string, error) {
 		return empty, errors.Wrapf(err, "login failed with role from environment variable VAULT_ROLE: %q", v.Role)
 	}
 
+	if s == nil {
+		return empty, fmt.Errorf("login failed")
+	}
+
 	if len(s.Warnings) > 0 {
 		return empty, fmt.Errorf("login failed with: %s", strings.Join(s.Warnings, " - "))
 	}
@@ -210,7 +214,7 @@ func (v *Vault) NewRenewer(token string) (*api.Renewer, error) {
 		return nil, errors.Wrap(err, "failed to renew-self token")
 	}
 
-	renewer, err := v.client.NewRenewer(&api.RenewerInput{Secret: secret})
+	renewer, err := v.client.NewLifetimeWatcher(&api.RenewerInput{Secret: secret})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get token renewer")
 	}
