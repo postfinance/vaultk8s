@@ -9,7 +9,6 @@ package vaultk8s
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 	"strconv"
@@ -23,7 +22,7 @@ import (
 // Constants
 const (
 	AuthMountPath           = "auth/kubernetes"
-	ServiceAccountTokenPath = "/var/run/secrets/kubernetes.io/serviceaccount/token" // nolint: gosec
+	ServiceAccountTokenPath = "/var/run/secrets/kubernetes.io/serviceaccount/token" //nolint: gosec // not the token
 )
 
 // VaultLogicalWriter interface for testing
@@ -32,7 +31,7 @@ type vaultLogicalWriter interface {
 }
 
 // vaultLogical will be overwritten by tests
-// nolint: gochecknoglobals
+//nolint:gochecknoglobals // testing
 var vaultLogical = func(c *api.Client) vaultLogicalWriter {
 	return c.Logical()
 }
@@ -120,7 +119,7 @@ func (v *Vault) Client() *api.Client {
 func (v *Vault) Authenticate() (string, error) {
 	var empty string
 	// read jwt of serviceaccount
-	content, err := ioutil.ReadFile(v.ServiceAccountTokenPath)
+	content, err := os.ReadFile(v.ServiceAccountTokenPath)
 	if err != nil {
 		return empty, errors.Wrap(err, "failed to read jwt token")
 	}
@@ -150,8 +149,8 @@ func (v *Vault) Authenticate() (string, error) {
 
 // StoreToken in VaultTokenPath
 func (v *Vault) StoreToken(token string) error {
-	// nolint: gosec // G306: Expect WriteFile permissions to be 0600 or less
-	if err := ioutil.WriteFile(v.TokenPath, []byte(token), 0644); err != nil {
+	//nolint:gosec // 0644 is fine here
+	if err := os.WriteFile(v.TokenPath, []byte(token), 0644); err != nil {
 		return errors.Wrap(err, "failed to store token")
 	}
 
@@ -160,7 +159,7 @@ func (v *Vault) StoreToken(token string) error {
 
 // LoadToken from VaultTokenPath
 func (v *Vault) LoadToken() (string, error) {
-	content, err := ioutil.ReadFile(v.TokenPath)
+	content, err := os.ReadFile(v.TokenPath)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to load token")
 	}
