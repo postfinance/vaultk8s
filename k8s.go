@@ -7,34 +7,23 @@
 package vaultk8s
 
 import (
-	"bytes"
+	"context"
 	"fmt"
 	"os"
-	"path"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/hashicorp/vault/api"
-	"github.com/pkg/errors"
+	vault "github.com/hashicorp/vault/api"
+	auth "github.com/hashicorp/vault/api/auth/kubernetes"
 )
 
 // Constants
 const (
-	AuthMountPath           = "auth/kubernetes"
+	AuthMountPath           = "kubernetes"
 	ServiceAccountTokenPath = "/var/run/secrets/kubernetes.io/serviceaccount/token" //nolint: gosec // not the token
+	DefaultTimeout          = 30 * time.Second
 )
-
-// VaultLogicalWriter interface for testing
-type vaultLogicalWriter interface {
-	Write(path string, data map[string]interface{}) (*api.Secret, error)
-}
-
-// vaultLogical will be overwritten by tests
-//nolint:gochecknoglobals // testing
-var vaultLogical = func(c *api.Client) vaultLogicalWriter {
-	return c.Logical()
-}
 
 // Vault represents the configuration to get a valid Vault token
 type Vault struct {
@@ -43,9 +32,10 @@ type Vault struct {
 	AuthMountPath           string
 	ServiceAccountTokenPath string
 	TTL                     int
-	client                  *api.Client
+	client                  *vault.Client
 	ReAuth                  bool
 	AllowFail               bool
+	LoginTimeout            time.Duration
 }
 
 // NewFromEnvironment returns a initialized Vault type for authentication
@@ -61,7 +51,7 @@ func NewFromEnvironment() (*Vault, error) {
 	if s := os.Getenv("VAULT_REAUTH"); s != "" {
 		b, err := strconv.ParseBool(s)
 		if err != nil {
-			return nil, errors.Wrap(err, "1, t, T, TRUE, true, True, 0, f, F, FALSE, false, False are valid values for ALLOW_FAIL")
+			return nil, fmt.Errorf("1, t, T, TRUE, true, True, 0, f, F, FALSE, false, False are valid values for ALLOW_FAIL: %w", err)
 		}
 
 		v.ReAuth = b
@@ -70,7 +60,7 @@ func NewFromEnvironment() (*Vault, error) {
 	if s := os.Getenv("VAULT_TTL"); s != "" {
 		d, err := time.ParseDuration(s)
 		if err != nil {
-			return nil, errors.Wrapf(err, "%s is not a valid duration for VAULT_TTL", s)
+			return nil, fmt.Errorf("%s is not a valid duration for VAULT_TTL: %w", s, err)
 		}
 
 		v.TTL = int(d.Seconds())
@@ -89,59 +79,63 @@ func NewFromEnvironment() (*Vault, error) {
 	if s := os.Getenv("ALLOW_FAIL"); s != "" {
 		b, err := strconv.ParseBool(s)
 		if err != nil {
-			return nil, errors.Wrap(err, "1, t, T, TRUE, true, True, 0, f, F, FALSE, false, False are valid values for ALLOW_FAIL")
+			return nil, fmt.Errorf("1, t, T, TRUE, true, True, 0, f, F, FALSE, false, False are valid values for ALLOW_FAIL: %w", err)
 		}
 
 		v.AllowFail = b
 	}
+
+	v.LoginTimeout = DefaultTimeout
+
+	if s := os.Getenv("LOGIN_TIMEOUT"); s != "" {
+		t, err := time.ParseDuration(s)
+		if err != nil {
+			return nil, fmt.Errorf("not a valid duration: %w", err)
+		}
+
+		v.LoginTimeout = t
+	}
+
 	// create vault client
-	vaultConfig := api.DefaultConfig()
+	vaultConfig := vault.DefaultConfig()
 	if err := vaultConfig.ReadEnvironment(); err != nil {
-		return nil, errors.Wrap(err, "failed to read environment for vault")
+		return nil, fmt.Errorf("failed to read environment for vault: %w", err)
 	}
 
 	var err error
 
-	v.client, err = api.NewClient(vaultConfig)
+	v.client, err = vault.NewClient(vaultConfig)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create vault client")
+		return nil, fmt.Errorf("failed to create vault client: %w", err)
 	}
 
 	return v, nil
 }
 
-// Client returns a Vault *api.Client
-func (v *Vault) Client() *api.Client {
+// Client returns a Vault *vault.Client
+func (v *Vault) Client() *vault.Client {
 	return v.client
 }
 
 // Authenticate with vault
 func (v *Vault) Authenticate() (string, error) {
 	var empty string
-	// read jwt of serviceaccount
-	content, err := os.ReadFile(v.ServiceAccountTokenPath)
+
+	k8sAuth, err := auth.NewKubernetesAuth(
+		v.Role,
+		auth.WithMountPath(FixAuthMountPath(v.AuthMountPath)),
+		auth.WithServiceAccountTokenPath(v.ServiceAccountTokenPath),
+	)
 	if err != nil {
-		return empty, errors.Wrap(err, "failed to read jwt token")
+		return "", fmt.Errorf("unable to initialize Kubernetes auth method: %w", err)
 	}
 
-	jwt := string(bytes.TrimSpace(content))
+	ctx, cancel := context.WithTimeout(context.Background(), v.LoginTimeout)
+	defer cancel()
 
-	// authenticate
-	data := make(map[string]interface{})
-	data["role"] = v.Role
-	data["jwt"] = jwt
-
-	s, err := vaultLogical(v.client).Write(path.Join(FixAuthMountPath(v.AuthMountPath), "login"), data)
+	s, err := v.client.Auth().Login(ctx, k8sAuth)
 	if err != nil {
-		return empty, errors.Wrapf(err, "login failed with role from environment variable VAULT_ROLE: %q", v.Role)
-	}
-
-	if s == nil {
-		return empty, fmt.Errorf("login failed")
-	}
-
-	if len(s.Warnings) > 0 {
-		return empty, fmt.Errorf("login failed with: %s", strings.Join(s.Warnings, " - "))
+		return empty, fmt.Errorf("login failed with role %s: %w", v.Role, err)
 	}
 
 	return s.Auth.ClientToken, nil
@@ -150,8 +144,8 @@ func (v *Vault) Authenticate() (string, error) {
 // StoreToken in VaultTokenPath
 func (v *Vault) StoreToken(token string) error {
 	//nolint:gosec // 0644 is fine here
-	if err := os.WriteFile(v.TokenPath, []byte(token), 0644); err != nil {
-		return errors.Wrap(err, "failed to store token")
+	if err := os.WriteFile(v.TokenPath, []byte(token), 0o644); err != nil {
+		return fmt.Errorf("failed to store token: %w", err)
 	}
 
 	return nil
@@ -161,7 +155,7 @@ func (v *Vault) StoreToken(token string) error {
 func (v *Vault) LoadToken() (string, error) {
 	content, err := os.ReadFile(v.TokenPath)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to load token")
+		return "", fmt.Errorf("failed to load token: %w", err)
 	}
 
 	if len(content) == 0 {
@@ -188,7 +182,7 @@ func (v *Vault) GetToken() (string, error) {
 			return v.Authenticate()
 		}
 
-		return empty, errors.Wrapf(err, "failed to load token form: %s", v.TokenPath)
+		return empty, fmt.Errorf("failed to load token form %s: %w", v.TokenPath, err)
 	}
 
 	v.client.SetToken(token)
@@ -198,38 +192,34 @@ func (v *Vault) GetToken() (string, error) {
 			return v.Authenticate()
 		}
 
-		return empty, errors.Wrap(err, "failed to renew token")
+		return empty, fmt.Errorf("failed to renew token: %w", err)
 	}
 
 	return token, nil
 }
 
-// NewRenewer returns a *api.Renewer to renew the vault token regularly
-func (v *Vault) NewRenewer(token string) (*api.Renewer, error) {
+// NewRenewer returns a *vault.Renewer to renew the vault token regularly
+func (v *Vault) NewRenewer(token string) (*vault.Renewer, error) {
 	v.client.SetToken(token)
 	// renew the token to get a secret usable for renewer
 	secret, err := v.client.Auth().Token().RenewSelf(v.TTL)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to renew-self token")
+		return nil, fmt.Errorf("failed to renew-self token: %w", err)
 	}
 
-	renewer, err := v.client.NewLifetimeWatcher(&api.RenewerInput{Secret: secret})
+	renewer, err := v.client.NewLifetimeWatcher(&vault.RenewerInput{Secret: secret})
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get token renewer")
+		return nil, fmt.Errorf("failed to get token renewer: %w", err)
 	}
 
 	return renewer, nil
 }
 
 // FixAuthMountPath add the auth prefix
-// kubernetes      -> auth/kubernetes
-// auth/kubernetes -> auth/kubernetes
+// kubernetes      -> kubernetes
+// /kubernetes     -> kubernetes
+// auth/kubernetes -> kubernetes
 // presumes a valid path
 func FixAuthMountPath(p string) string {
-	pp := strings.Split(strings.TrimLeft(p, "/"), "/")
-	if pp[0] == "auth" {
-		return path.Join(pp...) // already correct
-	}
-
-	return path.Join(append([]string{"auth"}, pp...)...)
+	return strings.TrimRight(strings.TrimPrefix(strings.TrimLeft(p, "/"), "auth/"), "/")
 }
