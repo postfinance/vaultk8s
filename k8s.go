@@ -7,7 +7,6 @@
 package vaultk8s
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"strconv"
@@ -15,7 +14,6 @@ import (
 	"time"
 
 	vault "github.com/hashicorp/vault/api"
-	auth "github.com/hashicorp/vault/api/auth/kubernetes"
 )
 
 // Constants
@@ -27,34 +25,53 @@ const (
 
 // Vault represents the configuration to get a valid Vault token
 type Vault struct {
+	// approle auth
+	RoleID   string
+	SecretID string
+
+	// kubernetes auth
 	Role                    string
-	TokenPath               string
-	AuthMountPath           string
 	ServiceAccountTokenPath string
-	TTL                     int
-	client                  *vault.Client
-	ReAuth                  bool
-	AllowFail               bool
-	LoginTimeout            time.Duration
+
+	TokenPath     string
+	AuthMountPath string
+	TTL           int
+
+	ReAuth    bool
+	AllowFail bool
+
+	LoginTimeout time.Duration
+
+	authenticate Authenticate
+	client       *vault.Client
 }
 
 // NewFromEnvironment returns a initialized Vault type for authentication
 func NewFromEnvironment() (*Vault, error) {
-	v := &Vault{}
+	v := &Vault{
+		authenticate: func() (string, error) {
+			return "", fmt.Errorf("authenticate function not defined")
+		},
+	}
+
+	v.RoleID = os.Getenv("VAULT_ROLE_ID")
+	v.SecretID = os.Getenv("VAULT_SECRET_ID")
+
 	v.Role = os.Getenv("VAULT_ROLE")
+
+	v.ServiceAccountTokenPath = os.Getenv("SERVICE_ACCOUNT_TOKEN_PATH")
+	if v.ServiceAccountTokenPath == "" {
+		v.ServiceAccountTokenPath = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+	}
 
 	v.TokenPath = os.Getenv("VAULT_TOKEN_PATH")
 	if v.TokenPath == "" {
 		return nil, fmt.Errorf("missing VAULT_TOKEN_PATH")
 	}
 
-	if s := os.Getenv("VAULT_REAUTH"); s != "" {
-		b, err := strconv.ParseBool(s)
-		if err != nil {
-			return nil, fmt.Errorf("1, t, T, TRUE, true, True, 0, f, F, FALSE, false, False are valid values for ALLOW_FAIL: %w", err)
-		}
-
-		v.ReAuth = b
+	v.AuthMountPath = FixAuthMountPath(AuthMountPath) // use default
+	if p := os.Getenv("VAULT_AUTH_MOUNT_PATH"); p != "" {
+		v.AuthMountPath = FixAuthMountPath(p) // if set, use value from environment
 	}
 
 	if s := os.Getenv("VAULT_TTL"); s != "" {
@@ -66,14 +83,13 @@ func NewFromEnvironment() (*Vault, error) {
 		v.TTL = int(d.Seconds())
 	}
 
-	v.AuthMountPath = FixAuthMountPath(AuthMountPath) // use default
-	if p := os.Getenv("VAULT_AUTH_MOUNT_PATH"); p != "" {
-		v.AuthMountPath = FixAuthMountPath(p) // if set, use value from environment
-	}
+	if s := os.Getenv("VAULT_REAUTH"); s != "" {
+		b, err := strconv.ParseBool(s)
+		if err != nil {
+			return nil, fmt.Errorf("1, t, T, TRUE, true, True, 0, f, F, FALSE, false, False are valid values for ALLOW_FAIL: %w", err)
+		}
 
-	v.ServiceAccountTokenPath = os.Getenv("SERVICE_ACCOUNT_TOKEN_PATH")
-	if v.ServiceAccountTokenPath == "" {
-		v.ServiceAccountTokenPath = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+		v.ReAuth = b
 	}
 
 	if s := os.Getenv("ALLOW_FAIL"); s != "" {
@@ -109,7 +125,17 @@ func NewFromEnvironment() (*Vault, error) {
 		return nil, fmt.Errorf("failed to create vault client: %w", err)
 	}
 
+	v.setAuthenticator()
+
 	return v, nil
+}
+
+func (v *Vault) setAuthenticator() {
+	v.authenticate = newKubernetesAuth(v)
+
+	if v.RoleID != "" && v.SecretID != "" {
+		v.authenticate = newAppRoleAuth(v)
+	}
 }
 
 // Client returns a Vault *vault.Client
@@ -119,26 +145,7 @@ func (v *Vault) Client() *vault.Client {
 
 // Authenticate with vault
 func (v *Vault) Authenticate() (string, error) {
-	var empty string
-
-	k8sAuth, err := auth.NewKubernetesAuth(
-		v.Role,
-		auth.WithMountPath(FixAuthMountPath(v.AuthMountPath)),
-		auth.WithServiceAccountTokenPath(v.ServiceAccountTokenPath),
-	)
-	if err != nil {
-		return "", fmt.Errorf("unable to initialize Kubernetes auth method: %w", err)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), v.LoginTimeout)
-	defer cancel()
-
-	s, err := v.client.Auth().Login(ctx, k8sAuth)
-	if err != nil {
-		return empty, fmt.Errorf("login failed with role %s: %w", v.Role, err)
-	}
-
-	return s.Auth.ClientToken, nil
+	return v.authenticate()
 }
 
 // StoreToken in VaultTokenPath

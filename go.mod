@@ -4,9 +4,9 @@ go 1.17
 
 require (
 	github.com/hashicorp/vault/api v1.3.0
+	github.com/hashicorp/vault/api/auth/approle v0.1.1
 	github.com/hashicorp/vault/api/auth/kubernetes v0.1.0
 	github.com/ory/dockertest v3.3.5+incompatible
-	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.7.0
 )
 
@@ -57,6 +57,7 @@ require (
 	github.com/opencontainers/image-spec v1.0.2 // indirect
 	github.com/opencontainers/runc v1.0.3 // indirect
 	github.com/pierrec/lz4 v2.5.2+incompatible // indirect
+	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/ryanuber/go-glob v1.0.0 // indirect
 	github.com/sirupsen/logrus v1.8.1 // indirect

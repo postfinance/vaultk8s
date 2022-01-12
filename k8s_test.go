@@ -12,7 +12,6 @@ import (
 
 	vault "github.com/hashicorp/vault/api"
 	"github.com/ory/dockertest"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -24,9 +23,25 @@ const (
 func TestMain(m *testing.M) {
 	flag.Parse()
 
+	cleanup, err := setupVault()
+	if err != nil {
+		cleanup()
+		log.Fatal(err)
+	}
+
+	code := m.Run()
+
+	cleanup()
+
+	os.Exit(code)
+}
+
+func setupVault() (func(), error) {
+	cleanup := func() {}
+
 	pool, err := dockertest.NewPool("unix:///var/run/docker.sock")
 	if err != nil {
-		log.Fatalf("Could not connect to docker: %s", err)
+		return cleanup, fmt.Errorf("Could not connect to docker: %w", err)
 	}
 
 	// pulls an image, creates a container based on it and runs it
@@ -35,7 +50,13 @@ func TestMain(m *testing.M) {
 		"VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200",
 	})
 	if err != nil {
-		log.Fatalf("Could not start resource: %s", err)
+		return cleanup, fmt.Errorf("Could not start resource: %w", err)
+	}
+
+	cleanup = func() {
+		if err := pool.Purge(resource); err != nil {
+			log.Printf("could not purge resource: %v", err)
+		}
 	}
 
 	host := os.Getenv("DOCKER_HOST")
@@ -56,12 +77,12 @@ func TestMain(m *testing.M) {
 
 	vaultConfig := vault.DefaultConfig()
 	if err := vaultConfig.ReadEnvironment(); err != nil {
-		log.Fatal(err)
+		return cleanup, err
 	}
 
 	vaultClient, err := vault.NewClient(vaultConfig)
 	if err != nil {
-		log.Fatal(err)
+		return cleanup, err
 	}
 
 	// exponential backoff-retry, because the application in the container might not be ready to accept connections yet
@@ -69,17 +90,70 @@ func TestMain(m *testing.M) {
 		_, err = vaultClient.Sys().ListMounts()
 		return err
 	}); err != nil {
-		log.Fatal(errors.Wrap(err, "could not connect to vault in docker"))
+		return cleanup, fmt.Errorf("could not connect to vault in docker: %w", err)
 	}
 
-	code := m.Run()
-
-	// You can't defer this because os.Exit doesn't care for defer
-	if err := pool.Purge(resource); err != nil {
-		log.Fatalf("could not purge resource: %s", err)
+	// enable approle auth method
+	if err := vaultClient.Sys().EnableAuth("approle", "approle", "approle authentication"); err != nil {
+		return cleanup, fmt.Errorf("failed to enable AppRole auth: %w", err)
 	}
 
-	os.Exit(code)
+	// enable kubernetes auth method
+	if err := vaultClient.Sys().EnableAuth("kubernetes", "kubernetes", "kubernetes authentication"); err != nil {
+		return cleanup, fmt.Errorf("failed to enable AppRole auth: %w", err)
+	}
+
+	// list auth methods
+	auth, err := vaultClient.Sys().ListAuth()
+	if err != nil {
+		return cleanup, fmt.Errorf("failed to list auth: %w", err)
+	}
+
+	log.Println("available auth methods")
+	for k, v := range auth {
+		log.Println("path:", k, "desc:", v.Description)
+	}
+
+	// create unittest policy
+	policy := `
+	path "secret/unittest" {
+		capabilities = ["create", "read", "update", "delete", "list"]
+	   }
+	`
+	if err := vaultClient.Sys().PutPolicy("unittest", policy); err != nil {
+		return cleanup, fmt.Errorf("failed to create policy: %w", err)
+	}
+
+	// create uinttest role
+	_, err = vaultClient.Logical().Write("auth/approle/role/unittest", map[string]interface{}{
+		"secret_id_ttl": 300 * time.Second,
+		"token_ttl":     300 * time.Second,
+		"token_max_tll": 300 * time.Second,
+		"policies":      "unittest",
+	})
+	if err != nil {
+		return cleanup, fmt.Errorf("failed to write role: %w", err)
+	}
+
+	// read role-id
+	s, err := vaultClient.Logical().Read("auth/approle/role/unittest/role-id")
+	if err != nil {
+		return cleanup, fmt.Errorf("failed to read role: %w", err)
+	}
+	_ = os.Setenv("_VAULT_ROLE_ID", s.Data["role_id"].(string))
+
+	log.Println("role_id", s.Data["role_id"].(string))
+
+	// create and read secret-id
+	s, err = vaultClient.Logical().Write("auth/approle/role/unittest/secret-id", nil)
+	if err != nil {
+		return cleanup, fmt.Errorf("failed to create secret_id: %w", err)
+	}
+	_ = os.Setenv("_VAULT_SECRET_ID", s.Data["secret_id"].(string))
+
+	log.Println("secret_id", s.Data["secret_id"].(string))
+
+	return cleanup, nil
 }
 
 func TestFixAuthMountPath(t *testing.T) {
@@ -200,7 +274,6 @@ func TestNewVaultFromEnvironment(t *testing.T) {
 		assert.Nil(t, v)
 		assert.Error(t, err)
 	})
-
 }
 
 //nolint:funlen // tests
@@ -318,7 +391,7 @@ func TestToken(t *testing.T) {
 }
 
 //nolint:funlen // tests
-func TestAuthenticate(t *testing.T) {
+func TestKubernetesAuth(t *testing.T) {
 	vaultTokenPath, err := ioutil.TempFile("", "vault-token")
 	if err != nil {
 		t.Fatal(err)
@@ -419,6 +492,29 @@ func TestAuthenticate(t *testing.T) {
 		token, err := v.GetToken()
 		assert.Error(t, err)
 		assert.Equal(t, "", token)
+	})
+}
+
+func TestAppRoleAuth(t *testing.T) {
+	vaultTokenPath, err := ioutil.TempFile("", "vault-token")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_ = os.Setenv("VAULT_TOKEN_PATH", vaultTokenPath.Name())
+	_ = os.Setenv("VAULT_AUTH_MOUNT_PATH", "approle")
+	_ = os.Setenv("VAULT_ROLE_ID", os.Getenv("_VAULT_ROLE_ID"))
+	_ = os.Setenv("VAULT_SECRET_ID", os.Getenv("_VAULT_SECRET_ID"))
+
+	defer os.Setenv("VAULT_AUTH_MOUNT_PATH", "")
+
+	t.Run("", func(t *testing.T) {
+		v, err := NewFromEnvironment()
+		assert.NotNil(t, v)
+		assert.NoError(t, err)
+		token, err := v.Authenticate()
+		assert.NoError(t, err)
+		assert.NotEmpty(t, token)
 	})
 }
 
