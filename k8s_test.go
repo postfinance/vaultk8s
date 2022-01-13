@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"path"
 	"strings"
 	"testing"
 	"time"
@@ -18,142 +19,23 @@ import (
 
 const (
 	rootToken = "90b03685-e17b-7e5e-13a0-e14e45baeb2f" //nolint:gosec // test token
+	testPath  = "secret/data/unittest"
 )
 
 func TestMain(m *testing.M) {
 	flag.Parse()
 
-	cleanup, err := setupVault()
+	cleanupVault, err := setupVault()
 	if err != nil {
-		cleanup()
+		cleanupVault()
 		log.Fatal(err)
 	}
 
 	code := m.Run()
 
-	cleanup()
+	cleanupVault()
 
 	os.Exit(code)
-}
-
-func setupVault() (func(), error) {
-	cleanup := func() {}
-
-	pool, err := dockertest.NewPool("unix:///var/run/docker.sock")
-	if err != nil {
-		return cleanup, fmt.Errorf("Could not connect to docker: %w", err)
-	}
-
-	// pulls an image, creates a container based on it and runs it
-	resource, err := pool.Run("vault", "latest", []string{
-		"VAULT_DEV_ROOT_TOKEN_ID=" + rootToken,
-		"VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200",
-	})
-	if err != nil {
-		return cleanup, fmt.Errorf("Could not start resource: %w", err)
-	}
-
-	cleanup = func() {
-		if err := pool.Purge(resource); err != nil {
-			log.Printf("could not purge resource: %v", err)
-		}
-	}
-
-	host := os.Getenv("DOCKER_HOST")
-	if host == "" {
-		host = "localhost"
-	}
-
-	if host != "localhost" && !strings.Contains(host, ".") {
-		host += ".pnet.ch"
-	}
-
-	vaultAddr := fmt.Sprintf("http://%s:%s", host, resource.GetPort("8200/tcp"))
-
-	_ = os.Setenv("VAULT_ADDR", vaultAddr)
-	_ = os.Setenv("VAULT_TOKEN", rootToken)
-
-	fmt.Println("VAULT_ADDR:", vaultAddr)
-
-	vaultConfig := vault.DefaultConfig()
-	if err := vaultConfig.ReadEnvironment(); err != nil {
-		return cleanup, err
-	}
-
-	vaultClient, err := vault.NewClient(vaultConfig)
-	if err != nil {
-		return cleanup, err
-	}
-
-	// exponential backoff-retry, because the application in the container might not be ready to accept connections yet
-	if err := pool.Retry(func() error {
-		_, err = vaultClient.Sys().ListMounts()
-		return err
-	}); err != nil {
-		return cleanup, fmt.Errorf("could not connect to vault in docker: %w", err)
-	}
-
-	// enable approle auth method
-	if err := vaultClient.Sys().EnableAuth("approle", "approle", "approle authentication"); err != nil {
-		return cleanup, fmt.Errorf("failed to enable AppRole auth: %w", err)
-	}
-
-	// enable kubernetes auth method
-	if err := vaultClient.Sys().EnableAuth("kubernetes", "kubernetes", "kubernetes authentication"); err != nil {
-		return cleanup, fmt.Errorf("failed to enable AppRole auth: %w", err)
-	}
-
-	// list auth methods
-	auth, err := vaultClient.Sys().ListAuth()
-	if err != nil {
-		return cleanup, fmt.Errorf("failed to list auth: %w", err)
-	}
-
-	log.Println("available auth methods")
-	for k, v := range auth {
-		log.Println("path:", k, "desc:", v.Description)
-	}
-
-	// create unittest policy
-	policy := `
-	path "secret/unittest" {
-		capabilities = ["create", "read", "update", "delete", "list"]
-	   }
-	`
-	if err := vaultClient.Sys().PutPolicy("unittest", policy); err != nil {
-		return cleanup, fmt.Errorf("failed to create policy: %w", err)
-	}
-
-	// create uinttest role
-	_, err = vaultClient.Logical().Write("auth/approle/role/unittest", map[string]interface{}{
-		"secret_id_ttl": 300 * time.Second,
-		"token_ttl":     300 * time.Second,
-		"token_max_tll": 300 * time.Second,
-		"policies":      "unittest",
-	})
-	if err != nil {
-		return cleanup, fmt.Errorf("failed to write role: %w", err)
-	}
-
-	// read role-id
-	s, err := vaultClient.Logical().Read("auth/approle/role/unittest/role-id")
-	if err != nil {
-		return cleanup, fmt.Errorf("failed to read role: %w", err)
-	}
-	_ = os.Setenv("_VAULT_ROLE_ID", s.Data["role_id"].(string))
-
-	log.Println("role_id", s.Data["role_id"].(string))
-
-	// create and read secret-id
-	s, err = vaultClient.Logical().Write("auth/approle/role/unittest/secret-id", nil)
-	if err != nil {
-		return cleanup, fmt.Errorf("failed to create secret_id: %w", err)
-	}
-	_ = os.Setenv("_VAULT_SECRET_ID", s.Data["secret_id"].(string))
-
-	log.Println("secret_id", s.Data["secret_id"].(string))
-
-	return cleanup, nil
 }
 
 func TestFixAuthMountPath(t *testing.T) {
@@ -508,13 +390,77 @@ func TestAppRoleAuth(t *testing.T) {
 
 	defer os.Setenv("VAULT_AUTH_MOUNT_PATH", "")
 
-	t.Run("", func(t *testing.T) {
+	t.Run("AppRole auth", func(t *testing.T) {
 		v, err := NewFromEnvironment()
 		assert.NotNil(t, v)
 		assert.NoError(t, err)
+
 		token, err := v.Authenticate()
 		assert.NoError(t, err)
 		assert.NotEmpty(t, token)
+	})
+
+	t.Run("CRUD with AppRole", func(t *testing.T) {
+		v, err := NewFromEnvironment()
+		assert.NotNil(t, v)
+		assert.NoError(t, err)
+
+		token, err := v.Authenticate()
+		assert.NoError(t, err)
+		assert.NotEmpty(t, token)
+
+		v.client.SetToken(token)
+
+		key := "key"
+		value := testPath
+
+		// create secret
+		inputData := map[string]interface{}{
+			"data": map[string]interface{}{
+				key: value,
+			},
+		}
+		cs, err := v.client.Logical().Write(testPath, inputData)
+		require.NoError(t, err)
+		require.NotNil(t, cs)
+
+		// read secret
+		rs, err := v.client.Logical().Read(testPath)
+		require.NoError(t, err)
+		require.NotNil(t, rs)
+		m, ok := rs.Data["data"].(map[string]interface{})
+		require.True(t, ok)
+		assert.Equal(t, value, m[key].(string))
+
+		// update secret
+		value = "update"
+		inputData = map[string]interface{}{
+			"data": map[string]interface{}{
+				key: value,
+			},
+		}
+		us, err := v.client.Logical().Write(testPath, inputData)
+		require.NoError(t, err)
+		require.NotNil(t, us)
+		// read secret
+		usr, err := v.client.Logical().Read(testPath)
+		require.NoError(t, err)
+		require.NotNil(t, usr)
+		m, ok = usr.Data["data"].(map[string]interface{})
+		require.True(t, ok)
+		assert.Equal(t, value, m[key].(string))
+
+		// delete secret
+		ds, err := v.client.Logical().Delete(testPath)
+		require.NoError(t, err)
+		require.Nil(t, ds)
+
+		// read deleted secret
+		rds, err := v.client.Logical().Read(testPath)
+		require.NoError(t, err)
+		require.NotNil(t, rds)
+		m, ok = rds.Data["data"].(map[string]interface{})
+		require.False(t, ok)
 	})
 }
 
@@ -560,4 +506,132 @@ func TestRenew(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NotNil(t, r)
 	})
+}
+
+// helper
+
+func setupVault() (func(), error) {
+	cleanup := func() {}
+
+	pool, err := dockertest.NewPool("unix:///var/run/docker.sock")
+	if err != nil {
+		return cleanup, fmt.Errorf("Could not connect to docker: %w", err)
+	}
+
+	// pulls an image, creates a container based on it and runs it
+	resource, err := pool.Run("vault", "latest", []string{
+		"VAULT_DEV_ROOT_TOKEN_ID=" + rootToken,
+		"VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200",
+	})
+	if err != nil {
+		return cleanup, fmt.Errorf("Could not start resource: %w", err)
+	}
+
+	cleanup = func() {
+		if err := pool.Purge(resource); err != nil {
+			log.Printf("could not purge resource: %v", err)
+		}
+	}
+
+	host := os.Getenv("DOCKER_HOST")
+	if host == "" {
+		host = "localhost"
+	}
+
+	if host != "localhost" && !strings.Contains(host, ".") {
+		host += ".pnet.ch"
+	}
+
+	vaultAddr := fmt.Sprintf("http://%s:%s", host, resource.GetPort("8200/tcp"))
+
+	_ = os.Setenv("VAULT_ADDR", vaultAddr)
+	_ = os.Setenv("VAULT_TOKEN", rootToken)
+
+	fmt.Println("VAULT_ADDR:", vaultAddr)
+
+	vaultConfig := vault.DefaultConfig()
+	if err := vaultConfig.ReadEnvironment(); err != nil {
+		return cleanup, err
+	}
+
+	vaultClient, err := vault.NewClient(vaultConfig)
+	if err != nil {
+		return cleanup, err
+	}
+
+	// exponential backoff-retry, because the application in the container might not be ready to accept connections yet
+	if err := pool.Retry(func() error {
+		_, err = vaultClient.Sys().ListMounts()
+		return err
+	}); err != nil {
+		return cleanup, fmt.Errorf("could not connect to vault in docker: %w", err)
+	}
+
+	// enable approle auth method
+	if err := vaultClient.Sys().EnableAuth("approle", "approle", "approle authentication"); err != nil {
+		return cleanup, fmt.Errorf("failed to enable AppRole auth: %w", err)
+	}
+
+	// enable kubernetes auth method
+	if err := vaultClient.Sys().EnableAuth("kubernetes", "kubernetes", "kubernetes authentication"); err != nil {
+		return cleanup, fmt.Errorf("failed to enable AppRole auth: %w", err)
+	}
+
+	// list auth methods
+	auth, err := vaultClient.Sys().ListAuth()
+	if err != nil {
+		return cleanup, fmt.Errorf("failed to list auth: %w", err)
+	}
+
+	log.Println("available auth methods")
+	for k, v := range auth {
+		log.Println("path:", k, "desc:", v.Description)
+	}
+
+	// create unittest policy
+	policyName := "unittest"
+	policy := `
+	path %q {
+		capabilities = ["create", "read", "update", "delete", "list"]
+	   }
+	`
+	if err := vaultClient.Sys().PutPolicy(policyName, fmt.Sprintf(policy, testPath)); err != nil {
+		return cleanup, fmt.Errorf("failed to create policy: %w", err)
+	}
+
+	p, err := vaultClient.Sys().GetPolicy(policyName)
+	if err != nil {
+		return cleanup, fmt.Errorf("failed to get policy:; %w", err)
+	}
+	log.Println("policy:", p)
+
+	// create inttest role
+	roleName := policyName
+	_, err = vaultClient.Logical().Write(path.Join("auth/approle/role", roleName), map[string]interface{}{
+		"policies": policyName,
+	})
+	if err != nil {
+		return cleanup, fmt.Errorf("failed to write role: %w", err)
+	}
+
+	// read role-id
+	s, err := vaultClient.Logical().Read(path.Join("auth/approle/role", roleName, "role-id"))
+	if err != nil {
+		return cleanup, fmt.Errorf("failed to read role: %w", err)
+	}
+
+	_ = os.Setenv("_VAULT_ROLE_ID", s.Data["role_id"].(string))
+
+	log.Println("role_id", s.Data["role_id"].(string))
+
+	// create and read secret-id
+	s, err = vaultClient.Logical().Write(path.Join("auth/approle/role", roleName, "secret-id"), nil)
+	if err != nil {
+		return cleanup, fmt.Errorf("failed to create secret_id: %w", err)
+	}
+	_ = os.Setenv("_VAULT_SECRET_ID", s.Data["secret_id"].(string))
+
+	log.Println("secret_id", s.Data["secret_id"].(string))
+
+	return cleanup, nil
 }

@@ -29,12 +29,16 @@ func newKubernetesAuth(v *Vault) Authenticate {
 		ctx, cancel := context.WithTimeout(context.Background(), v.LoginTimeout)
 		defer cancel()
 
-		s, err := v.client.Auth().Login(ctx, a)
+		authInfo, err := v.client.Auth().Login(ctx, a)
 		if err != nil {
 			return "", fmt.Errorf("login failed with Kubernetes auth (role: %s): %w", v.Role, err)
 		}
 
-		return s.Auth.ClientToken, nil
+		if authInfo == nil {
+			return "", fmt.Errorf("no auth info was returned after login")
+		}
+
+		return authInfo.Auth.ClientToken, nil
 	}
 }
 
@@ -44,6 +48,7 @@ func newAppRoleAuth(v *Vault) Authenticate {
 			FromString: v.SecretID,
 		}
 
+		// TODO: wrapping token
 		opts := []approle.LoginOption{
 			approle.WithMountPath(FixAuthMountPath(v.AuthMountPath)),
 		}
@@ -60,11 +65,15 @@ func newAppRoleAuth(v *Vault) Authenticate {
 		ctx, cancel := context.WithTimeout(context.Background(), v.LoginTimeout)
 		defer cancel()
 
-		s, err := v.client.Auth().Login(ctx, a)
+		authInfo, err := v.client.Auth().Login(ctx, a)
 		if err != nil {
 			return "", fmt.Errorf("login failed with AppRole auth (role_id: %s): %w", v.RoleID, err)
 		}
 
-		return s.Auth.ClientToken, nil
+		if authInfo == nil {
+			return "", fmt.Errorf("no auth info was returned after login")
+		}
+
+		return authInfo.Auth.ClientToken, nil
 	}
 }
