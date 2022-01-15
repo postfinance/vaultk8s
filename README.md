@@ -8,4 +8,33 @@
 
 Package vaultk8s provides authentication with Vault on Kubernetes
 
-Replaces: `github.com/postfinance/vault/k8s`
+> Replaces package `github.com/postfinance/vault/k8s`
+
+Authentication is done either with Vault's  *Kubernetes Auth Method* or *AppRole Auth Method*.
+
+Checkout the Vault documentation for details:
+- [Kubernetes Auth Method](https://www.vaultproject.io/docs/auth/kubernetes)
+- [AppRole Auth Method](https://www.vaultproject.io/docs/auth/approle)
+
+If the environment variables `VAULT_ROLE_ID` and `VAULT_SECRET_ID` are set, *AppRole Auth Method* will be used, *Kubernetes Auth Method* otherwise.
+
+For a successful Kubernetes authentication the environment variable `VAULT_ROLE` must be set.
+
+## Tests
+
+For testing, HashiCorp's Vault and a Kubernetes cluster will be used.
+### HashiCorp Vault
+
+- [Install Vault](https://www.vaultproject.io/docs/install)
+- Start Vault:
+    ```
+    export VAULT_DEV_ROOT_TOKEN_ID="90b03685-e17b-7e5e-13a0-e14e45baeb2f"
+    export VAULT_DEV_LISTEN_ADDRESS="127.0.0.1:8200"
+    vault server -dev
+    ```
+
+> **IMPORTANT: Start vault with the same root token and listen address as defined in `k8s_test.go`.**
+
+### Kubernetes
+- Install and start [kind](https://kind.sigs.k8s.io/docs/user/quick-start/).
+
