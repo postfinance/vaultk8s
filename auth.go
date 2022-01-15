@@ -31,7 +31,7 @@ func newKubernetesAuth(v *Vault) Authenticate {
 
 		authInfo, err := v.client.Auth().Login(ctx, a)
 		if err != nil {
-			return "", fmt.Errorf("login failed with Kubernetes auth (role: %s): %w", v.Role, err)
+			return "", err
 		}
 
 		if authInfo == nil {
@@ -67,7 +67,7 @@ func newAppRoleAuth(v *Vault) Authenticate {
 
 		authInfo, err := v.client.Auth().Login(ctx, a)
 		if err != nil {
-			return "", fmt.Errorf("login failed with AppRole auth (role_id: %s): %w", v.RoleID, err)
+			return "", err
 		}
 
 		if authInfo == nil {

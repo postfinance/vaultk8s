@@ -15,6 +15,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
+    - uses: engineerd/setup-kind@v0.5.0
+      with:
+        version: "v0.11.1"
+        image: kindest/node:v1.22.1      
+      run: |
+        kubectl cluster-info
+        echo "current-context:" $(kubectl config current-context)
+        echo "environment-kubeconfig:" ${KUBECONFIG}
+        kubectl apply -f ci/rbac.yaml
+    - uses: innovationnorway/setup-vault@v1
+      with:
+        version: '~1.9'
+      env:
+        VAULT_DEV_ROOT_TOKEN_ID: "90b03685-e17b-7e5e-13a0-e14e45baeb2f"
+        VAULT_DEV_LISTEN_ADDRESS:"127.0.0.1:8200"
+      run: vault server -dev
     - uses: actions/setup-go@v1
       with:
         go-version: 1.17
