@@ -302,6 +302,7 @@ func TestKubernetesAuth(t *testing.T) {
 		v, err := NewFromEnvironment()
 		assert.NotNil(t, v)
 		assert.NoError(t, err)
+
 		token, err := v.Authenticate()
 		assert.Error(t, err)
 		assert.Empty(t, token)
@@ -315,6 +316,7 @@ func TestKubernetesAuth(t *testing.T) {
 		v, err := NewFromEnvironment()
 		assert.NotNil(t, v)
 		assert.NoError(t, err)
+
 		token, err := v.Authenticate()
 		assert.Error(t, err)
 		assert.Empty(t, token)
@@ -324,30 +326,74 @@ func TestKubernetesAuth(t *testing.T) {
 		v, err := NewFromEnvironment()
 		assert.NotNil(t, v)
 		assert.NoError(t, err)
+
 		token, err := v.Authenticate()
 		assert.NoError(t, err)
 		assert.NotEmpty(t, token)
 	})
 
-	/*
-		t.Run("failed authentication with warnings", func(t *testing.T) {
-			defer os.Setenv("SERVICE_ACCOUNT_TOKEN_PATH", os.Getenv("SERVICE_ACCOUNT_TOKEN_PATH"))
+	t.Run("CRUD with Kubernetes Auth", func(t *testing.T) {
+		v, err := NewFromEnvironment()
+		assert.NotNil(t, v)
+		assert.NoError(t, err)
 
-			require.NoError(t, os.Setenv("SERVICE_ACCOUNT_TOKEN_PATH", serviceAccountTokenPath.Name()))
+		token, err := v.Authenticate()
+		assert.NoError(t, err)
+		assert.NotEmpty(t, token)
 
-			v, err := NewFromEnvironment()
-			assert.NotNil(t, v)
-			assert.NoError(t, err)
-			vaultLogicalBackup := vaultLogical
-			vaultLogical = func(c *vault.Client) vaultLogicalWriter {
-				return &fakeWriterWithWarnings{}
-			}
-			defer func() { vaultLogical = vaultLogicalBackup }()
-			token, err := v.Authenticate()
-			assert.Error(t, err)
-			assert.Equal(t, "", token)
-		})
-	*/
+		v.client.SetToken(token)
+
+		key := "kubernetesAuthKey"
+		value := testPath
+
+		// create secret
+		inputData := map[string]interface{}{
+			"data": map[string]interface{}{
+				key: value,
+			},
+		}
+		cs, err := v.client.Logical().Write(testPath, inputData)
+		require.NoError(t, err)
+		require.NotNil(t, cs)
+
+		// read secret
+		rs, err := v.client.Logical().Read(testPath)
+		require.NoError(t, err)
+		require.NotNil(t, rs)
+		m, ok := rs.Data["data"].(map[string]interface{})
+		require.True(t, ok)
+		assert.Equal(t, value, m[key].(string))
+
+		// update secret
+		value = "update"
+		inputData = map[string]interface{}{
+			"data": map[string]interface{}{
+				key: value,
+			},
+		}
+		us, err := v.client.Logical().Write(testPath, inputData)
+		require.NoError(t, err)
+		require.NotNil(t, us)
+		// read secret
+		usr, err := v.client.Logical().Read(testPath)
+		require.NoError(t, err)
+		require.NotNil(t, usr)
+		m, ok = usr.Data["data"].(map[string]interface{})
+		require.True(t, ok)
+		assert.Equal(t, value, m[key].(string))
+
+		// delete secret
+		ds, err := v.client.Logical().Delete(testPath)
+		require.NoError(t, err)
+		require.Nil(t, ds)
+
+		// read deleted secret
+		rds, err := v.client.Logical().Read(testPath)
+		require.NoError(t, err)
+		require.NotNil(t, rds)
+		m, ok = rds.Data["data"].(map[string]interface{})
+		require.False(t, ok)
+	})
 
 	t.Run("failed to get token with ReAuth", func(t *testing.T) {
 		defer os.Remove(vaultTokenPath)
@@ -360,6 +406,7 @@ func TestKubernetesAuth(t *testing.T) {
 		v, err := NewFromEnvironment()
 		assert.NotNil(t, v)
 		assert.NoError(t, err)
+
 		token, err := v.GetToken()
 		assert.Error(t, err)
 		assert.Equal(t, "", token)
@@ -377,6 +424,7 @@ func TestKubernetesAuth(t *testing.T) {
 		assert.NotNil(t, v)
 		assert.NoError(t, err)
 		require.NoError(t, v.StoreToken(rootToken))
+
 		token, err := v.GetToken()
 		assert.Error(t, err)
 		assert.Equal(t, "", token)
@@ -405,7 +453,7 @@ func TestAppRoleAuth(t *testing.T) {
 		assert.NotEmpty(t, token)
 	})
 
-	t.Run("CRUD with AppRole", func(t *testing.T) {
+	t.Run("CRUD with AppRole auth", func(t *testing.T) {
 		v, err := NewFromEnvironment()
 		assert.NotNil(t, v)
 		assert.NoError(t, err)
@@ -416,7 +464,7 @@ func TestAppRoleAuth(t *testing.T) {
 
 		v.client.SetToken(token)
 
-		key := "key"
+		key := "appRoleAuthKey"
 		value := testPath
 
 		// create secret
@@ -481,7 +529,7 @@ func TestRenew(t *testing.T) {
 		v, err := NewFromEnvironment()
 		assert.NotNil(t, v)
 		assert.NoError(t, err)
-		// the actual test
+
 		r, err := v.NewRenewer(rootToken)
 		assert.Error(t, err)
 		assert.Nil(t, r)
@@ -495,12 +543,14 @@ func TestRenew(t *testing.T) {
 		v, err := NewFromEnvironment()
 		assert.NotNil(t, v)
 		assert.NoError(t, err)
+
 		// create a new token
 		v.UseToken(rootToken)
 		secret, err := v.Client().Auth().Token().CreateOrphan(&vault.TokenCreateRequest{
 			TTL: "3600s",
 		})
 		assert.NoError(t, err)
+
 		r, err := v.NewRenewer(secret.Auth.ClientToken)
 		assert.NoError(t, err)
 		assert.NotNil(t, r)
