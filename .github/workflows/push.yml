@@ -38,7 +38,7 @@ jobs:
       env:
         VAULT_DEV_ROOT_TOKEN_ID: "90b03685-e17b-7e5e-13a0-e14e45baeb2f"
         VAULT_DEV_LISTEN_ADDRESS: "127.0.0.1:8200"
-      run: vault server -dev
+      run: vault server -dev &
     - name: Run Unit tests
       run: go test -covermode atomic -coverprofile=profile.cov $(go list -m)/...
     - name: Send coverage
