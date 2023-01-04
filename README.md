@@ -37,4 +37,4 @@ For testing, HashiCorp's Vault and a Kubernetes cluster will be used.
 
 ### Kubernetes
 - Install and start [kind](https://kind.sigs.k8s.io/docs/user/quick-start/).
-
+- `kubectl apply -f ci/rbac.yaml`

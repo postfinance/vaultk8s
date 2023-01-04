@@ -18,6 +18,8 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
+
+	_ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
 )
 
 const (
@@ -28,6 +30,7 @@ const (
 	// Kubernetes
 	namespace      = "default"
 	serviceaccount = "vault-auth"
+	secret         = serviceaccount // secret with the service account token
 )
 
 func TestMain(m *testing.M) {
@@ -723,29 +726,15 @@ func setupKubernetes(tokenfile string) (*rest.Config, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	sa, err := cs.CoreV1().ServiceAccounts(namespace).Get(ctx, serviceaccount, metav1.GetOptions{})
+	s, err := cs.CoreV1().Secrets(namespace).Get(ctx, secret, metav1.GetOptions{})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get service account token %s for service account %s: %v", secret, serviceaccount, err)
 	}
 
-	for _, o := range sa.Secrets {
-		log.Printf("k8s: secret=%q", o.Name)
-		s, err := cs.CoreV1().Secrets(namespace).Get(ctx, o.Name, metav1.GetOptions{})
-		if err != nil {
-			log.Println("ERROR:", err)
-
-			continue
-		}
-
-		t, ok := s.Data["token"]
-		if !ok {
-			log.Println("ERROR:", fmt.Errorf("token not found"))
-
-			continue
-		}
-
-		return config, os.WriteFile(tokenfile, t, 0o600)
+	t, ok := s.Data["token"]
+	if !ok {
+		return nil, fmt.Errorf("failed to get service account token %s for service account %s: %v", secret, serviceaccount, err)
 	}
 
-	return nil, fmt.Errorf("no access token for service account %s in namespace %s found", serviceaccount, namespace)
+	return config, os.WriteFile(tokenfile, t, 0o600)
 }
