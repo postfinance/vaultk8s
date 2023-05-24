@@ -22,6 +22,7 @@ jobs:
       uses: cpanato/vault-installer@main
       with:
         vault-release: '1.10.2'
+        install-dir: '$HOME'
     - name: Setup Go
       uses: actions/setup-go@v3
       with:
