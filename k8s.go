@@ -14,7 +14,7 @@ import (
 // Constants
 const (
 	AuthMountPath           = "kubernetes"
-	ServiceAccountTokenPath = "/var/run/secrets/kubernetes.io/serviceaccount/token" //nolint: gosec // not the token
+	ServiceAccountTokenPath = "/var/run/secrets/kubernetes.io/serviceaccount/token" //nolint:gosec // not the token
 	DefaultTimeout          = 30 * time.Second
 )
 
