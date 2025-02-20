@@ -5,14 +5,14 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - uses: golangci/golangci-lint-action@master
       with:
         version: v1.52.2
   test:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Setup kind
       uses: engineerd/setup-kind@v0.5.0
       with:
