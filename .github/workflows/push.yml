@@ -17,7 +17,7 @@ jobs:
       uses: engineerd/setup-kind@v0.6.2
       with:
         version: "v0.17.0"
-        image: kindest/node:v1.25.3      
+        image: kindest/node:v1.25.3
     - name: Install Vault
       uses: cpanato/vault-installer@main
       with:
@@ -26,14 +26,14 @@ jobs:
     - name: Setup Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.20'
+        go-version: '1.23'
     - name: Show cluster info and configure RBAC
       run: |
         kubectl cluster-info
         echo "current-context:" $(kubectl config current-context)
         echo "environment-kubeconfig:" ${KUBECONFIG}
         kubectl apply -f ci/rbac.yaml
-    - name: Run Vault 
+    - name: Run Vault
       env:
         VAULT_DEV_ROOT_TOKEN_ID: "90b03685-e17b-7e5e-13a0-e14e45baeb2f"
         VAULT_DEV_LISTEN_ADDRESS: "127.0.0.1:8200"

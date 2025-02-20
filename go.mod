@@ -1,6 +1,6 @@
 module github.com/postfinance/vaultk8s
 
-go 1.19
+go 1.23
 
 require (
 	github.com/hashicorp/vault/api v1.9.1
