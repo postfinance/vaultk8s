@@ -24,7 +24,7 @@ jobs:
         vault-release: '1.10.2'
         install-dir: '$HOME'
     - name: Setup Go
-      uses: actions/setup-go@v3
+      uses: actions/setup-go@v5
       with:
         go-version: '1.20'
     - name: Show cluster info and configure RBAC
