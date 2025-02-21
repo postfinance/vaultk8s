@@ -9,7 +9,7 @@ linters-settings:
   depguard:
     rules:
       prevent_unmaintained_packages:
-        list-mode: Strict
+        list-mode: strict
         files:
           - $all
           - "!$test"
