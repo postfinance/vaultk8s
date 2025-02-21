@@ -6,6 +6,16 @@ run:
 linters-settings:
   dupl:
     threshold: 100
+  depguard:
+    rules:
+      prevent_unmaintained_packages:
+        list-mode: Strict
+        files:
+          - $all
+          - "!$test"
+        allow:
+          - $gostd
+          - github.com/hashicorp/vault
   funlen:
     lines: 100
     statements: 50
@@ -42,7 +52,6 @@ linters:
   disable-all: true
   enable:
     - bodyclose
-    - deadcode
     - depguard
     - dogsled
     - dupl
@@ -69,13 +78,11 @@ linters:
     - rowserrcheck
     - exportloopref
     - staticcheck
-    - structcheck
     - stylecheck
     - typecheck
     - unconvert
     - unparam
     - unused
-    - varcheck
     - whitespace
     - wsl
 

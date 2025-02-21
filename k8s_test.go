@@ -60,6 +60,14 @@ func TestFixAuthMountPath(t *testing.T) {
 	}
 }
 
+func newEnv(t require.TestingT, envvarName, envvarValue string) (*Vault, error) {
+	require.NoError(t, os.Setenv(envvarName, envvarValue))
+
+	v, err := NewFromEnvironment()
+
+	return v, err
+}
+
 func TestNewVaultFromEnvironment(t *testing.T) {
 	vaultTokenPath := filepath.Join(os.TempDir(), "vault-token")
 
@@ -70,9 +78,7 @@ func TestNewVaultFromEnvironment(t *testing.T) {
 	t.Run("without minimal attributes", func(t *testing.T) {
 		defer os.Setenv("VAULT_TOKEN_PATH", os.Getenv("VAULT_TOKEN_PATH"))
 
-		require.NoError(t, os.Setenv("VAULT_TOKEN_PATH", ""))
-
-		v, err := NewFromEnvironment()
+		v, err := newEnv(t, "VAULT_TOKEN_PATH", "")
 		assert.Nil(t, v)
 		assert.Error(t, err)
 	})
@@ -80,9 +86,7 @@ func TestNewVaultFromEnvironment(t *testing.T) {
 	t.Run("with minimal attributes", func(t *testing.T) {
 		defer os.Setenv("SERVICE_ACCOUNT_TOKEN_PATH", os.Getenv("SERVICE_ACCOUNT_TOKEN_PATH"))
 
-		require.NoError(t, os.Setenv("SERVICE_ACCOUNT_TOKEN_PATH", ""))
-
-		v, err := NewFromEnvironment()
+		v, err := newEnv(t, "SERVICE_ACCOUNT_TOKEN_PATH", "")
 		assert.NotNil(t, v)
 		assert.NoError(t, err)
 		assert.Equal(t, "", v.Role)
@@ -97,9 +101,7 @@ func TestNewVaultFromEnvironment(t *testing.T) {
 	t.Run("invalid VAULT_TTL", func(t *testing.T) {
 		defer os.Setenv("VAULT_TTL", os.Getenv("VAULT_TTL"))
 
-		require.NoError(t, os.Setenv("VAULT_TTL", "1std"))
-
-		v, err := NewFromEnvironment()
+		v, err := newEnv(t, "VAULT_TTL", "1")
 		assert.Nil(t, v)
 		assert.Error(t, err)
 	})
@@ -107,9 +109,7 @@ func TestNewVaultFromEnvironment(t *testing.T) {
 	t.Run("valid VAULT_TTL", func(t *testing.T) {
 		defer os.Setenv("VAULT_TTL", os.Getenv("VAULT_TTL"))
 
-		require.NoError(t, os.Setenv("VAULT_TTL", "1h"))
-
-		v, err := NewFromEnvironment()
+		v, err := newEnv(t, "VAULT_TTL", "1h")
 		assert.NotNil(t, v)
 		assert.NoError(t, err)
 		assert.Equal(t, 3600, v.TTL)
@@ -118,9 +118,8 @@ func TestNewVaultFromEnvironment(t *testing.T) {
 	t.Run("invalid VAULT_REAUTH", func(t *testing.T) {
 		defer os.Setenv("VAULT_REAUTH", os.Getenv("VAULT_REAUTH"))
 
-		require.NoError(t, os.Setenv("VAULT_REAUTH", "no"))
+		v, err := newEnv(t, "VAULT_REAUTH", "no")
 
-		v, err := NewFromEnvironment()
 		assert.Nil(t, v)
 		assert.Error(t, err)
 	})
@@ -128,9 +127,7 @@ func TestNewVaultFromEnvironment(t *testing.T) {
 	t.Run("valid VAULT_REAUTH", func(t *testing.T) {
 		defer os.Setenv("VAULT_REAUTH", os.Getenv("VAULT_REAUTH"))
 
-		require.NoError(t, os.Setenv("VAULT_REAUTH", "true"))
-
-		v, err := NewFromEnvironment()
+		v, err := newEnv(t, "VAULT_REAUTH", "true")
 		assert.NotNil(t, v)
 		assert.NoError(t, err)
 		assert.Equal(t, true, v.ReAuth)
@@ -139,9 +136,7 @@ func TestNewVaultFromEnvironment(t *testing.T) {
 	t.Run("invalid ALLOW_FAIL", func(t *testing.T) {
 		defer os.Setenv("ALLOW_FAIL", os.Getenv("ALLOW_FAIL"))
 
-		require.NoError(t, os.Setenv("ALLOW_FAIL", "no"))
-
-		v, err := NewFromEnvironment()
+		v, err := newEnv(t, "ALLOW_FAIL", "no")
 		assert.Nil(t, v)
 		assert.Error(t, err)
 	})
@@ -149,9 +144,7 @@ func TestNewVaultFromEnvironment(t *testing.T) {
 	t.Run("valid ALLOW_FAIL", func(t *testing.T) {
 		defer os.Setenv("ALLOW_FAIL", os.Getenv("ALLOW_FAIL"))
 
-		require.NoError(t, os.Setenv("ALLOW_FAIL", "true"))
-
-		v, err := NewFromEnvironment()
+		v, err := newEnv(t, "ALLOW_FAIL", "true")
 		assert.NotNil(t, v)
 		assert.NoError(t, err)
 		assert.Equal(t, true, v.AllowFail)
@@ -160,9 +153,7 @@ func TestNewVaultFromEnvironment(t *testing.T) {
 	t.Run("valid LOGIN_TIMEOUT", func(t *testing.T) {
 		defer os.Setenv("LOGIN_TIMEOUT", os.Getenv("LOGIN_TIMEOUT"))
 
-		require.NoError(t, os.Setenv("LOGIN_TIMEOUT", "1h"))
-
-		v, err := NewFromEnvironment()
+		v, err := newEnv(t, "LOGIN_TIMEOUT", "1h")
 		assert.NotNil(t, v)
 		assert.NoError(t, err)
 		assert.Equal(t, 1*time.Hour, v.LoginTimeout)
@@ -171,9 +162,7 @@ func TestNewVaultFromEnvironment(t *testing.T) {
 	t.Run("invalid LOGIN_TIMEOUT", func(t *testing.T) {
 		defer os.Setenv("LOGIN_TIMEOUT", os.Getenv("LOGIN_TIMEOUT"))
 
-		require.NoError(t, os.Setenv("LOGIN_TIMEOUT", "1"))
-
-		v, err := NewFromEnvironment()
+		v, err := newEnv(t, "LOGIN_TIMEOUT", "1")
 		assert.Nil(t, v)
 		assert.Error(t, err)
 	})
@@ -288,7 +277,6 @@ func TestToken(t *testing.T) {
 	})
 }
 
-//nolint:funlen // tests
 func TestKubernetesAuth(t *testing.T) {
 	vaultTokenPath := filepath.Join(os.TempDir(), "vault-token")
 
@@ -336,66 +324,7 @@ func TestKubernetesAuth(t *testing.T) {
 	})
 
 	t.Run("CRUD with Kubernetes Auth", func(t *testing.T) {
-		v, err := NewFromEnvironment()
-		assert.NotNil(t, v)
-		assert.NoError(t, err)
-
-		token, err := v.Authenticate()
-		assert.NoError(t, err)
-		assert.NotEmpty(t, token)
-
-		v.client.SetToken(token)
-
-		key := "kubernetesAuthKey"
-		value := testPath
-
-		// create secret
-		inputData := map[string]interface{}{
-			"data": map[string]interface{}{
-				key: value,
-			},
-		}
-		cs, err := v.client.Logical().Write(testPath, inputData)
-		require.NoError(t, err)
-		require.NotNil(t, cs)
-
-		// read secret
-		rs, err := v.client.Logical().Read(testPath)
-		require.NoError(t, err)
-		require.NotNil(t, rs)
-		m, ok := rs.Data["data"].(map[string]interface{})
-		require.True(t, ok)
-		assert.Equal(t, value, m[key].(string))
-
-		// update secret
-		value = "update"
-		inputData = map[string]interface{}{
-			"data": map[string]interface{}{
-				key: value,
-			},
-		}
-		us, err := v.client.Logical().Write(testPath, inputData)
-		require.NoError(t, err)
-		require.NotNil(t, us)
-		// read secret
-		usr, err := v.client.Logical().Read(testPath)
-		require.NoError(t, err)
-		require.NotNil(t, usr)
-		m, ok = usr.Data["data"].(map[string]interface{})
-		require.True(t, ok)
-		assert.Equal(t, value, m[key].(string))
-
-		// delete secret
-		ds, err := v.client.Logical().Delete(testPath)
-		require.NoError(t, err)
-		require.Nil(t, ds)
-
-		// read deleted secret
-		rds, err := v.client.Logical().Read(testPath)
-		require.NoError(t, err)
-		require.NotNil(t, rds)
-		m, ok = rds.Data["data"].(map[string]interface{})
-		require.False(t, ok)
+		createAPIRequest(t)
 	})
 
 	t.Run("failed to get token with ReAuth", func(t *testing.T) {
@@ -434,6 +363,69 @@ func TestKubernetesAuth(t *testing.T) {
 	})
 }
 
+func createAPIRequest(t testing.TB) {
+	v, err := NewFromEnvironment()
+	assert.NotNil(t, v)
+	assert.NoError(t, err)
+
+	token, err := v.Authenticate()
+	assert.NoError(t, err)
+	assert.NotEmpty(t, token)
+
+	v.client.SetToken(token)
+
+	key := "kubernetesAuthKey"
+	value := testPath
+
+	// create secret
+	inputData := map[string]interface{}{
+		"data": map[string]interface{}{
+			key: value,
+		},
+	}
+	cs, err := v.client.Logical().Write(testPath, inputData)
+	require.NoError(t, err)
+	require.NotNil(t, cs)
+
+	// read secret
+	rs, err := v.client.Logical().Read(testPath)
+	require.NoError(t, err)
+	require.NotNil(t, rs)
+	m, ok := rs.Data["data"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, value, m[key].(string))
+
+	// update secret
+	value = "update"
+	inputData = map[string]interface{}{
+		"data": map[string]interface{}{
+			key: value,
+		},
+	}
+	us, err := v.client.Logical().Write(testPath, inputData)
+	require.NoError(t, err)
+	require.NotNil(t, us)
+	// read secret
+	usr, err := v.client.Logical().Read(testPath)
+	require.NoError(t, err)
+	require.NotNil(t, usr)
+	m, ok = usr.Data["data"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, value, m[key].(string))
+
+	// delete secret
+	ds, err := v.client.Logical().Delete(testPath)
+	require.NoError(t, err)
+	require.Nil(t, ds)
+
+	// read deleted secret
+	rds, err := v.client.Logical().Read(testPath)
+	require.NoError(t, err)
+	require.NotNil(t, rds)
+	_, ok = rds.Data["data"].(map[string]interface{})
+	require.False(t, ok)
+}
+
 func TestAppRoleAuth(t *testing.T) {
 	defer os.Setenv("VAULT_AUTH_MOUNT_PATH", os.Getenv("VAULT_AUTH_MOUNT_PATH"))
 
@@ -457,66 +449,7 @@ func TestAppRoleAuth(t *testing.T) {
 	})
 
 	t.Run("CRUD with AppRole auth", func(t *testing.T) {
-		v, err := NewFromEnvironment()
-		assert.NotNil(t, v)
-		assert.NoError(t, err)
-
-		token, err := v.Authenticate()
-		assert.NoError(t, err)
-		assert.NotEmpty(t, token)
-
-		v.client.SetToken(token)
-
-		key := "appRoleAuthKey"
-		value := testPath
-
-		// create secret
-		inputData := map[string]interface{}{
-			"data": map[string]interface{}{
-				key: value,
-			},
-		}
-		cs, err := v.client.Logical().Write(testPath, inputData)
-		require.NoError(t, err)
-		require.NotNil(t, cs)
-
-		// read secret
-		rs, err := v.client.Logical().Read(testPath)
-		require.NoError(t, err)
-		require.NotNil(t, rs)
-		m, ok := rs.Data["data"].(map[string]interface{})
-		require.True(t, ok)
-		assert.Equal(t, value, m[key].(string))
-
-		// update secret
-		value = "update"
-		inputData = map[string]interface{}{
-			"data": map[string]interface{}{
-				key: value,
-			},
-		}
-		us, err := v.client.Logical().Write(testPath, inputData)
-		require.NoError(t, err)
-		require.NotNil(t, us)
-		// read secret
-		usr, err := v.client.Logical().Read(testPath)
-		require.NoError(t, err)
-		require.NotNil(t, usr)
-		m, ok = usr.Data["data"].(map[string]interface{})
-		require.True(t, ok)
-		assert.Equal(t, value, m[key].(string))
-
-		// delete secret
-		ds, err := v.client.Logical().Delete(testPath)
-		require.NoError(t, err)
-		require.Nil(t, ds)
-
-		// read deleted secret
-		rds, err := v.client.Logical().Read(testPath)
-		require.NoError(t, err)
-		require.NotNil(t, rds)
-		m, ok = rds.Data["data"].(map[string]interface{})
-		require.False(t, ok)
+		createAPIRequest(t)
 	})
 }
 
@@ -586,7 +519,7 @@ func run(m *testing.M) (int, error) {
 	return code, err
 }
 
-func setupVault(k8sConfig *rest.Config, saTokenPath string) error {
+func setupVault(k8sConfig *rest.Config, saTokenPath string) error { //nolint:funlen // setup
 	_ = os.Setenv("VAULT_ADDR", fmt.Sprintf("http://%s", vaultAddr))
 	_ = os.Setenv("VAULT_TOKEN", rootToken)
 
@@ -619,6 +552,7 @@ func setupVault(k8sConfig *rest.Config, saTokenPath string) error {
 	}
 
 	log.Println("vault: available auth methods")
+
 	for k, v := range auth {
 		log.Printf("vault: auth method=%q path=%q", v.Description, k)
 	}
@@ -638,13 +572,15 @@ func setupVault(k8sConfig *rest.Config, saTokenPath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get policy:; %w", err)
 	}
+
 	log.Printf("vault: policy=%q %s", policyName, p)
 
 	// configure AppRole Auth Method
 
 	// create unittest role
 	roleName := policyName
-	_, err = vaultClient.Logical().Write(filepath.Join("auth/approle/role", roleName), map[string]interface{}{
+
+	_, err = vaultClient.Logical().Write(filepath.Join("auth", "approle", "role", roleName), map[string]interface{}{
 		"policies": policyName,
 	})
 	if err != nil {
@@ -652,7 +588,7 @@ func setupVault(k8sConfig *rest.Config, saTokenPath string) error {
 	}
 
 	// read role-id
-	s, err := vaultClient.Logical().Read(filepath.Join("auth/approle/role", roleName, "role-id"))
+	s, err := vaultClient.Logical().Read(filepath.Join("auth", "approle", "role", roleName, "role-id"))
 	if err != nil {
 		return fmt.Errorf("failed to read role: %w", err)
 	}
@@ -662,16 +598,17 @@ func setupVault(k8sConfig *rest.Config, saTokenPath string) error {
 	log.Printf("vault: role_id=%q", s.Data["role_id"].(string))
 
 	// create and read secret-id
-	s, err = vaultClient.Logical().Write(filepath.Join("auth/approle/role", roleName, "secret-id"), nil)
+	s, err = vaultClient.Logical().Write(filepath.Join("auth", "approle", "role", roleName, "secret-id"), nil)
 	if err != nil {
 		return fmt.Errorf("failed to create secret_id: %w", err)
 	}
+
 	_ = os.Setenv("_VAULT_SECRET_ID", s.Data["secret_id"].(string))
 
 	log.Printf("vault: secret_id=%q", s.Data["secret_id"].(string))
 
 	// configure Kubernetes Auth Method
-	token, err := os.ReadFile(saTokenPath)
+	token, err := os.ReadFile(saTokenPath) //nolint:gosec // test token
 	if err != nil {
 		return fmt.Errorf("failed to read service account token: %w", err)
 	}
@@ -688,7 +625,8 @@ func setupVault(k8sConfig *rest.Config, saTokenPath string) error {
 
 	// create named role for Kubernetes Auth Method
 	roleName = policyName
-	_, err = vaultClient.Logical().Write(filepath.Join("auth/kubernetes/role", roleName), map[string]interface{}{
+
+	_, err = vaultClient.Logical().Write(filepath.Join("auth", "kubernetes", "role", roleName), map[string]interface{}{
 		"bound_service_account_names":      serviceaccount,
 		"bound_service_account_namespaces": namespace,
 		"policies":                         policyName,
@@ -708,6 +646,7 @@ func setupKubernetes(tokenfile string) (*rest.Config, error) {
 	} else {
 		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
 	}
+
 	flag.Parse()
 
 	// use the current context in kubeconfig
