@@ -52,6 +52,7 @@ linters:
   disable-all: true
   enable:
     - bodyclose
+    - copyloopvar
     - depguard
     - dogsled
     - dupl
@@ -76,7 +77,6 @@ linters:
     - nakedret
     - prealloc
     - rowserrcheck
-    - exportloopref
     - staticcheck
     - stylecheck
     - typecheck
