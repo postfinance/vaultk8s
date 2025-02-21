@@ -1,14 +1,21 @@
 ---
 run:
-  tests: false
-  skip-dirs:
-    - .github
-    - build
-    - web
-    - .go
+  tests: true
+  timeout: 3m
+
 linters-settings:
   dupl:
     threshold: 100
+  depguard:
+    rules:
+      prevent_unmaintained_packages:
+        list-mode: strict
+        files:
+          - $all
+          - "!$test"
+        allow:
+          - $gostd
+          - github.com/hashicorp/vault
   funlen:
     lines: 100
     statements: 50
@@ -27,16 +34,14 @@ linters-settings:
       - hugeParam
   gocyclo:
     min-complexity: 15
-  revive:
-    min-confidence: 0.8
   govet:
-    check-shadowing: true
+    enable:
+     - shadow
   lll:
     line-length: 140
   misspell:
     locale: US
   nolintlint:
-    allow-leading-space: false
     require-explanation: true
     allow-no-explanation:
       - gocognit
@@ -47,7 +52,7 @@ linters:
   disable-all: true
   enable:
     - bodyclose
-    - deadcode
+    - copyloopvar
     - depguard
     - dogsled
     - dupl
@@ -72,15 +77,12 @@ linters:
     - nakedret
     - prealloc
     - rowserrcheck
-    - exportloopref
     - staticcheck
-    - structcheck
     - stylecheck
     - typecheck
     - unconvert
     - unparam
     - unused
-    - varcheck
     - whitespace
     - wsl
 
