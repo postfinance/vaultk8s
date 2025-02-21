@@ -1,11 +1,8 @@
 ---
 run:
-  tests: false
-  skip-dirs:
-    - .github
-    - build
-    - web
-    - .go
+  tests: true
+  timeout: 3m
+
 linters-settings:
   dupl:
     threshold: 100
@@ -27,16 +24,14 @@ linters-settings:
       - hugeParam
   gocyclo:
     min-complexity: 15
-  revive:
-    min-confidence: 0.8
   govet:
-    check-shadowing: true
+    enable:
+     - shadow
   lll:
     line-length: 140
   misspell:
     locale: US
   nolintlint:
-    allow-leading-space: false
     require-explanation: true
     allow-no-explanation:
       - gocognit
