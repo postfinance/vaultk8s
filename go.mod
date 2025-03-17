@@ -1,6 +1,7 @@
 module github.com/postfinance/vaultk8s
 
 go 1.23.1
+toolchain go1.24.1
 
 require (
 	github.com/hashicorp/vault/api v1.16.0
@@ -8,7 +9,7 @@ require (
 	github.com/hashicorp/vault/api/auth/kubernetes v0.9.0
 	github.com/stretchr/testify v1.10.0
 	golang.org/x/net v0.35.0
-	k8s.io/apimachinery v0.32.2
+	k8s.io/apimachinery v0.32.3
 	k8s.io/client-go v0.32.2
 )
 
