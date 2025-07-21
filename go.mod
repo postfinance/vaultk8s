@@ -3,7 +3,7 @@ module github.com/postfinance/vaultk8s
 go 1.24.0
 
 require (
-	github.com/hashicorp/vault/api v1.16.0
+	github.com/hashicorp/vault/api v1.20.0
 	github.com/hashicorp/vault/api/auth/approle v0.9.0
 	github.com/hashicorp/vault/api/auth/kubernetes v0.9.0
 	github.com/stretchr/testify v1.10.0
@@ -34,7 +34,7 @@ require (
 	github.com/hashicorp/go-secure-stdlib/parseutil v0.1.9 // indirect
 	github.com/hashicorp/go-secure-stdlib/strutil v0.1.2 // indirect
 	github.com/hashicorp/go-sockaddr v1.0.7 // indirect
-	github.com/hashicorp/hcl v1.0.0 // indirect
+	github.com/hashicorp/hcl v1.0.1-vault-7 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
