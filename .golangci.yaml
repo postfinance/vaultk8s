@@ -40,7 +40,7 @@ linters:
           list-mode: strict
           files:
             - $all
-            - '!$test'
+            - "!$test"
           allow:
             - $gostd
             - github.com/hashicorp/vault
