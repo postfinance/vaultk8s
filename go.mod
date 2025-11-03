@@ -3,7 +3,7 @@ module github.com/postfinance/vaultk8s
 go 1.24.0
 
 require (
-	github.com/hashicorp/vault/api v1.20.0
+	github.com/hashicorp/vault/api v1.22.0
 	github.com/hashicorp/vault/api/auth/approle v0.11.0
 	github.com/hashicorp/vault/api/auth/kubernetes v0.10.0
 	github.com/stretchr/testify v1.11.1
