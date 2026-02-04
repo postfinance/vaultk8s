@@ -1,6 +1,7 @@
 package vaultk8s
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -12,7 +13,6 @@ import (
 	vault "github.com/hashicorp/vault/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -37,7 +37,6 @@ func TestMain(m *testing.M) {
 	flag.Parse()
 
 	code, err := run(m)
-
 	if err != nil {
 		log.Fatal(err)
 	}
