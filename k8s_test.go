@@ -44,6 +44,7 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+//nolint:goconst //these are paths
 func TestFixAuthMountPath(t *testing.T) {
 	testData := [][2]string{
 		{"kubernetes", "kubernetes"},
@@ -264,6 +265,7 @@ func TestToken(t *testing.T) {
 		// create a new token
 		v.UseToken(rootToken)
 		secret, err := v.Client().Auth().Token().CreateOrphan(&vault.TokenCreateRequest{
+			//nolint:goconst //time value
 			TTL: "3600s",
 		})
 		assert.NoError(t, err)
@@ -378,6 +380,7 @@ func createAPIRequest(t testing.TB) {
 
 	// create secret
 	inputData := map[string]interface{}{
+		//nolint:goconst //this is a literal field
 		"data": map[string]interface{}{
 			key: value,
 		},
@@ -522,7 +525,7 @@ func setupVault(k8sConfig *rest.Config, saTokenPath string) error { //nolint:fun
 	_ = os.Setenv("VAULT_ADDR", fmt.Sprintf("http://%s", vaultAddr))
 	_ = os.Setenv("VAULT_TOKEN", rootToken)
 
-	log.Printf("vault: VAULT_ADDR=%q", os.Getenv("VAULT_ADDR"))
+	log.Printf("vault: VAULT_ADDR=%q", os.Getenv("VAULT_ADDR")) //nolint:gosec // test setup
 
 	vaultConfig := vault.DefaultConfig()
 	if err := vaultConfig.ReadEnvironment(); err != nil {
@@ -580,6 +583,7 @@ func setupVault(k8sConfig *rest.Config, saTokenPath string) error { //nolint:fun
 	roleName := policyName
 
 	_, err = vaultClient.Logical().Write(filepath.Join("auth", "approle", "role", roleName), map[string]interface{}{
+		//nolint:goconst //this is a literal string
 		"policies": policyName,
 	})
 	if err != nil {
