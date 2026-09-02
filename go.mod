@@ -5,7 +5,7 @@ go 1.25.0
 require (
 	github.com/hashicorp/vault/api v1.23.0
 	github.com/hashicorp/vault/api/auth/approle v0.11.0
-	github.com/hashicorp/vault/api/auth/kubernetes v0.10.0
+	github.com/hashicorp/vault/api/auth/kubernetes v0.12.0
 	github.com/stretchr/testify v1.11.1
 	k8s.io/apimachinery v0.35.0
 	k8s.io/client-go v0.35.0
