@@ -7,7 +7,7 @@ require (
 	github.com/hashicorp/vault/api/auth/approle v0.12.0
 	github.com/hashicorp/vault/api/auth/kubernetes v0.12.0
 	github.com/stretchr/testify v1.11.1
-	k8s.io/apimachinery v0.37.0
+	k8s.io/apimachinery v0.37.2
 	k8s.io/client-go v0.37.0
 )
 
